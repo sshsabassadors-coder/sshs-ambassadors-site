@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1787137280696,
+      "tag": "0000_material_ezekiel",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787147313196,
+      "tag": "0001_far_sunfire",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787147331308,
+      "tag": "0002_great_stephen_strange",
+      "breakpoints": true
+    }
+  ]
+}

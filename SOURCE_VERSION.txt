@@ -1,0 +1,7 @@
+SSHS Ambassadors source snapshot
+Created: 2026-08-19
+Commit: be3a6e22614507111487939f5f2409b7478fc273
+Site version: 28
+Live URL: https://sshs-ambassadors.soullee0180.chatgpt.site
+Git history: not included
+Secrets and environment values: not included

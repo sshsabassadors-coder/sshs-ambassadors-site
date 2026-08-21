@@ -1,0 +1,1 @@
+CREATE INDEX `tour_note_images_note_idx` ON `tour_note_images` (`note_id`,`sort_index`);
