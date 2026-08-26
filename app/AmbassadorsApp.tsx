@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import CampusMap from "./CampusMap";
 import { createTourNote, loadTourNotes, StoredTourNote } from "./contentApi";
-import { copy, Language, RouteKey, tourStops } from "./data";
+import { copy, Language, RouteKey, TourStop, tourStops } from "./data";
 import { AdminPage, DataPage, LoginPage, SurveyPage, UserSession } from "./PortalPages";
 
 function routeFromHash(): RouteKey {
@@ -71,7 +71,46 @@ function IntroPage({ language }: { language: Language }) {
   );
 }
 
-function MemberNotes({ slug, language, session }: { slug: string; language: Language; session: UserSession | null }) {
+function noteImages(note: StoredTourNote) {
+  const urls = note.image_urls?.length ? note.image_urls : note.image_url ? [note.image_url] : [];
+  const names = note.image_names?.length ? note.image_names : note.image_name ? [note.image_name] : [];
+  return { urls, names };
+}
+
+function MemberNoteCard({ note, language, stop, stopIndex }: { note: StoredTourNote; language: Language; stop: TourStop; stopIndex: number }) {
+  const langIndex = language === "ko" ? 0 : 1;
+  const { urls, names } = noteImages(note);
+  const description = language === "ko" ? note.body_ko || note.body_en : note.body_en || note.body_ko;
+  const coverUrl = urls.at(-1) || null;
+  const coverName = names.at(-1) || "";
+
+  return <>
+    {urls.map((imageUrl, imageIndex) => (
+      <section className="tour-story-panel tour-photo-panel" key={`${note.id}-photo-${imageIndex}`} aria-label={`${stop.name[langIndex]} ${language === "ko" ? "사진" : "photo"} ${imageIndex + 1}`}>
+        <article className="tour-photo-heading">
+          <div className="stop-meta"><span>{stop.building[langIndex]}</span><span>{stop.floor[langIndex]}</span></div>
+          <p className="stop-number">STOP {String(stopIndex + 1).padStart(2, "0")} / {tourStops.length}</p>
+          <h3>{stop.name[langIndex]}</h3>
+        </article>
+        <figure className="tour-photo-frame">
+          <img src={imageUrl} alt={names[imageIndex] || `${stop.name[langIndex]} ${language === "ko" ? "사진" : "photo"} ${imageIndex + 1}`} />
+          <figcaption>{imageIndex + 1} / {urls.length}</figcaption>
+        </figure>
+      </section>
+    ))}
+    <section className={`tour-story-panel tour-description-panel ${coverUrl ? "" : "no-photo"}`} aria-label={`${stop.name[langIndex]} ${language === "ko" ? "설명" : "description"}`}>
+      <figure className="tour-description-visual">
+        {coverUrl ? <img src={coverUrl} alt={coverName || `${stop.name[langIndex]} ${language === "ko" ? "대표 사진" : "featured photo"}`} /> : <span>{stop.name[langIndex]}</span>}
+      </figure>
+      <article className="tour-description-card">
+        <span>AMBASSADOR NOTE</span>
+        <p>{description}</p>
+      </article>
+    </section>
+  </>;
+}
+
+function TourStopStory({ stop, stopIndex, language, session, onExpand }: { stop: TourStop; stopIndex: number; language: Language; session: UserSession | null; onExpand: () => void }) {
   const [notes, setNotes] = useState<StoredTourNote[]>([]);
   const [editing, setEditing] = useState(false);
   const [bodyKo, setBodyKo] = useState("");
@@ -79,15 +118,28 @@ function MemberNotes({ slug, language, session }: { slug: string; language: Lang
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [storyPage, setStoryPage] = useState(0);
+  const storyTrack = useRef<HTMLDivElement>(null);
+  const t = copy[language];
+  const langIndex = language === "ko" ? 0 : 1;
 
   useEffect(() => {
     let active = true;
-    loadTourNotes("tour-1", slug)
-    .then(({ items }) => { if (active) setNotes(items ?? []); })      .catch(() => undefined);
+    loadTourNotes("tour-1", stop.id)
+      .then(({ items }) => { if (active) setNotes(items); })
+      .catch(() => undefined);
     return () => { active = false; };
-  }, [slug]);
+  }, [stop.id]);
 
-  if (!session && notes.length === 0) return null;
+  const storyPageCount = 1 + notes.reduce((count, note) => count + noteImages(note).urls.length + 1, 0);
+
+  const moveStory = (nextPage: number) => {
+    const track = storyTrack.current;
+    if (!track) return;
+    const page = Math.max(0, Math.min(storyPageCount - 1, nextPage));
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    track.scrollTo({ left: page * track.clientWidth, behavior: reducedMotion ? "auto" : "smooth" });
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -100,11 +152,11 @@ function MemberNotes({ slug, language, session }: { slug: string; language: Lang
       setSaving(true); setError("");
       let note: StoredTourNote;
       try {
-        note = (await createTourNote("tour-1", slug, bodyKo.trim(), bodyEn.trim(), imageFiles)).item;
+        note = (await createTourNote("tour-1", stop.id, bodyKo.trim(), bodyEn.trim(), imageFiles)).item;
       } catch (cause) {
         if (!session.demo) throw cause;
         const imageUrls = imageFiles.map((image) => URL.createObjectURL(image));
-        note = { id: `preview-${Date.now()}-${Math.random().toString(36).slice(2)}`, route_id: "tour-1", stop_slug: slug, body_ko: bodyKo.trim(), body_en: bodyEn.trim(), image_url: imageUrls[0] || null, image_name: imageFiles[0]?.name || null, image_urls: imageUrls, image_names: imageFiles.map((image) => image.name), author_email: session.email, created_at: new Date().toISOString() };
+        note = { id: `preview-${Date.now()}-${Math.random().toString(36).slice(2)}`, route_id: "tour-1", stop_slug: stop.id, body_ko: bodyKo.trim(), body_en: bodyEn.trim(), image_url: imageUrls[0] || null, image_name: imageFiles[0]?.name || null, image_urls: imageUrls, image_names: imageFiles.map((image) => image.name), author_email: session.email, created_at: new Date().toISOString() };
       }
       setNotes((items) => [note, ...items]); setBodyKo(""); setBodyEn(""); setImageFiles([]); setEditing(false);
     } catch (cause) {
@@ -113,33 +165,57 @@ function MemberNotes({ slug, language, session }: { slug: string; language: Lang
   };
 
   return (
-    <section className="member-notes" aria-label={language === "ko" ? "홍보단 장소 설명" : "Ambassador place notes"}>
-      <div className="member-notes-heading">
-        <div><span>MEMBER NOTES</span><strong>{language === "ko" ? "홍보단 설명" : "Ambassador notes"}</strong></div>
-        {session && <button type="button" onClick={() => setEditing((value) => !value)}>{editing ? (language === "ko" ? "취소" : "Cancel") : (language === "ko" ? "+ 설명 추가" : "+ Add note")}</button>}
+    <div className="tour-stop-story">
+      <div
+        className="tour-story-track"
+        ref={storyTrack}
+        tabIndex={storyPageCount > 1 ? 0 : -1}
+        aria-label={`${stop.name[langIndex]} ${language === "ko" ? "사진과 설명" : "photos and description"}`}
+        onScroll={(event) => setStoryPage(Math.round(event.currentTarget.scrollLeft / Math.max(1, event.currentTarget.clientWidth)))}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") { event.preventDefault(); moveStory(storyPage - 1); }
+          if (event.key === "ArrowRight") { event.preventDefault(); moveStory(storyPage + 1); }
+        }}
+      >
+        <section className="tour-story-panel tour-overview-panel">
+          <div className="tour-map-column">
+            <div className="map-toolbar">
+              <div className="legend"><span><i className="legend-dot" />{t.mapLegend}</span><span><i className="legend-line" />{t.routeLegend}</span></div>
+              <button onClick={onExpand}>{t.zoom}<span>⛶</span></button>
+            </div>
+            <CampusMap stopIndex={stopIndex} variant="tour" language={language} /><p className="map-note">{t.floorPlan}</p>
+          </div>
+          <article className="stop-card">
+            <div className="stop-meta"><span>{stop.building[langIndex]}</span><span>{stop.floor[langIndex]}</span></div>
+            <p className="stop-number">STOP {String(stopIndex + 1).padStart(2, "0")} / {tourStops.length}</p>
+            <h2>{stop.name[langIndex]}</h2>
+            {(session || notes.length > 0) && <section className="member-notes" aria-label={language === "ko" ? "홍보단 장소 설명" : "Ambassador place notes"}>
+              <div className="member-notes-heading">
+                <div><span>MEMBER NOTES</span><strong>{language === "ko" ? "홍보단 설명" : "Ambassador notes"}</strong></div>
+                <div className="member-note-actions">
+                  {notes.length > 0 && <button type="button" onClick={() => moveStory(1)}>{language === "ko" ? "사진·설명 보기 →" : "View story →"}</button>}
+                  {session && <button type="button" onClick={() => setEditing((value) => !value)}>{editing ? (language === "ko" ? "취소" : "Cancel") : (language === "ko" ? "+ 설명 추가" : "+ Add note")}</button>}
+                </div>
+              </div>
+              {editing && <form className="member-note-form" onSubmit={submit}>
+                <label>한국어 설명<textarea rows={3} maxLength={2000} value={bodyKo} onChange={(event) => setBodyKo(event.target.value)} required /></label>
+                <label>English<textarea rows={3} maxLength={2000} value={bodyEn} onChange={(event) => setBodyEn(event.target.value)} /></label>
+                <label className="member-image-field">{language === "ko" ? "사진" : "Photo"} <small>optional</small><input type="file" accept="image/*" multiple onChange={(event) => setImageFiles(Array.from(event.target.files || []))} /></label>
+                <button className="member-note-submit" disabled={saving}>{saving ? (language === "ko" ? "저장 중…" : "Saving…") : (language === "ko" ? "설명 등록" : "Post note")}</button>
+              </form>}
+              {error && <p className="member-note-error" role="alert">{error}</p>}
+            </section>}
+          </article>
+        </section>
+        {notes.map((note) => <MemberNoteCard key={note.id} note={note} language={language} stop={stop} stopIndex={stopIndex} />)}
       </div>
-      {notes.length > 0 && <div className="member-note-list">{notes.map((note) => <MemberNoteCard key={note.id} note={note} language={language} />)}</div>}
-      {editing && <form className="member-note-form" onSubmit={submit}>
-        <label>한국어 설명<textarea rows={3} maxLength={2000} value={bodyKo} onChange={(event) => setBodyKo(event.target.value)} required /></label>
-        <label>English<textarea rows={3} maxLength={2000} value={bodyEn} onChange={(event) => setBodyEn(event.target.value)} /></label>
-        <label className="member-image-field">{language === "ko" ? "사진" : "Photo"} <small>optional</small><input type="file" accept="image/*" multiple onChange={(event) => setImageFiles(Array.from(event.target.files || []))} /></label>
-        <button className="member-note-submit" disabled={saving}>{saving ? (language === "ko" ? "저장 중…" : "Saving…") : (language === "ko" ? "설명 등록" : "Post note")}</button>
-      </form>}
-      {error && <p className="member-note-error" role="alert">{error}</p>}
-    </section>
-  );
-}
-
-function MemberNoteCard({ note, language }: { note: StoredTourNote; language: Language }) {
-  const track = useRef<HTMLDivElement>(null);
-  const imageUrls = note.image_urls?.length ? note.image_urls : note.image_url ? [note.image_url] : [];
-  const imageNames = note.image_names?.length ? note.image_names : note.image_name ? [note.image_name] : [];
-  return <article className="member-note-card">
-    <div className="member-note-carousel" ref={track}>
-      <section className="member-note-slide"><span>AMBASSADOR NOTE</span><p>{language === "ko" ? note.body_ko || note.body_en : note.body_en || note.body_ko}</p>{imageUrls.length > 0 && <button type="button" onClick={() => track.current?.scrollTo({ left: track.current.clientWidth, behavior: "smooth" })}>{language === "ko" ? `사진 ${imageUrls.length}장 보기` : `View ${imageUrls.length} photo${imageUrls.length === 1 ? "" : "s"}`} →</button>}</section>
-      {imageUrls.map((imageUrl, index) => <section className="member-note-slide member-note-photo" key={`${imageUrl}-${index}`}><img src={imageUrl} alt={imageNames[index] || `Tour location ${index + 1}`} /><span className="member-photo-count">{index + 1} / {imageUrls.length}</span><button type="button" onClick={() => track.current?.scrollTo({ left: 0, behavior: "smooth" })}>← {language === "ko" ? "설명" : "Note"}</button></section>)}
+      {storyPageCount > 1 && <div className="tour-story-controls" aria-label={language === "ko" ? "사진과 설명 이동" : "Story navigation"}>
+        <button type="button" onClick={() => moveStory(storyPage - 1)} disabled={storyPage === 0} aria-label={language === "ko" ? "이전 화면" : "Previous panel"}>←</button>
+        <span aria-live="polite">{storyPage + 1} / {storyPageCount}</span>
+        <button type="button" onClick={() => moveStory(storyPage + 1)} disabled={storyPage >= storyPageCount - 1} aria-label={language === "ko" ? "다음 화면" : "Next panel"}>→</button>
+      </div>}
     </div>
-  </article>;
+  );
 }
 
 function TourPage({ language, session }: { language: Language; session: UserSession | null }) {
@@ -173,19 +249,7 @@ function TourPage({ language, session }: { language: Language; session: UserSess
       <div className="tour-slides" ref={containerRef}>
         {tourStops.map((stop, index) => (
           <section className="tour-slide" key={stop.id} data-stop-index={index} aria-label={`${index + 1}. ${stop.name[langIndex]}`}>
-            <div className="tour-map-column">
-              <div className="map-toolbar">
-                <div className="legend"><span><i className="legend-dot" />{t.mapLegend}</span><span><i className="legend-line" />{t.routeLegend}</span></div>
-                <button onClick={() => setExpanded(true)}>{t.zoom}<span>⛶</span></button>
-              </div>
-              <CampusMap stopIndex={index} variant="tour" language={language} /><p className="map-note">{t.floorPlan}</p>
-            </div>
-            <article className="stop-card">
-              <div className="stop-meta"><span>{stop.building[langIndex]}</span><span>{stop.floor[langIndex]}</span></div>
-              <p className="stop-number">STOP {String(index + 1).padStart(2, "0")} / {tourStops.length}</p>
-              <h2>{stop.name[langIndex]}</h2>
-              <MemberNotes slug={stop.id} language={language} session={session} />
-            </article>
+            <TourStopStory stop={stop} stopIndex={index} language={language} session={session} onExpand={() => setExpanded(true)} />
           </section>
         ))}
       </div>
