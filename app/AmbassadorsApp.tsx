@@ -2,9 +2,10 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import CampusMap from "./CampusMap";
-import { createTourNote, loadTourNotes, StoredTourNote } from "./contentApi";
+import { createTourNote, loadTourNotes, loadTourRoutes, StoredTourNote, type StoredTourRoute } from "./contentApi";
 import { copy, Language, RouteKey, TourStop, tourStops } from "./data";
 import { AdminPage, DataPage, LoginPage, SurveyPage, UserSession } from "./PortalPages";
+import { getCurrentAuthSession, onAuthSessionChange, signOut } from "./supabase";
 
 function routeFromHash(): RouteKey {
   if (typeof window === "undefined") return "intro";
@@ -77,7 +78,7 @@ function noteImages(note: StoredTourNote) {
   return { urls, names };
 }
 
-function MemberNoteCard({ note, language, stop, stopIndex }: { note: StoredTourNote; language: Language; stop: TourStop; stopIndex: number }) {
+function MemberNoteCard({ note, language, stop, stopIndex, stopCount }: { note: StoredTourNote; language: Language; stop: TourStop; stopIndex: number; stopCount: number }) {
   const langIndex = language === "ko" ? 0 : 1;
   const { urls, names } = noteImages(note);
   const description = language === "ko" ? note.body_ko || note.body_en : note.body_en || note.body_ko;
@@ -89,7 +90,7 @@ function MemberNoteCard({ note, language, stop, stopIndex }: { note: StoredTourN
       <section className="tour-story-panel tour-photo-panel" key={`${note.id}-photo-${imageIndex}`} aria-label={`${stop.name[langIndex]} ${language === "ko" ? "사진" : "photo"} ${imageIndex + 1}`}>
         <article className="tour-photo-heading">
           <div className="stop-meta"><span>{stop.building[langIndex]}</span><span>{stop.floor[langIndex]}</span></div>
-          <p className="stop-number">STOP {String(stopIndex + 1).padStart(2, "0")} / {tourStops.length}</p>
+          <p className="stop-number">STOP {String(stopIndex + 1).padStart(2, "0")} / {stopCount}</p>
           <h3>{stop.name[langIndex]}</h3>
         </article>
         <figure className="tour-photo-frame">
@@ -110,7 +111,7 @@ function MemberNoteCard({ note, language, stop, stopIndex }: { note: StoredTourN
   </>;
 }
 
-function TourStopStory({ stop, stopIndex, language, session, onExpand }: { stop: TourStop; stopIndex: number; language: Language; session: UserSession | null; onExpand: () => void }) {
+function TourStopStory({ routeId, stop, stopIndex, stopCount, mapStopIndex, language, session, onExpand }: { routeId: string; stop: TourStop; stopIndex: number; stopCount: number; mapStopIndex: number; language: Language; session: UserSession | null; onExpand: () => void }) {
   const [notes, setNotes] = useState<StoredTourNote[]>([]);
   const [editing, setEditing] = useState(false);
   const [bodyKo, setBodyKo] = useState("");
@@ -125,11 +126,11 @@ function TourStopStory({ stop, stopIndex, language, session, onExpand }: { stop:
 
   useEffect(() => {
     let active = true;
-    loadTourNotes("tour-1", stop.id)
-      .then(({ items }) => { if (active) setNotes(items); })
+    loadTourNotes(routeId, stop.id, session?.token)
+      .then(({ items }) => { if (active) setNotes(items ?? []); })
       .catch(() => undefined);
     return () => { active = false; };
-  }, [stop.id]);
+  }, [routeId, session?.token, stop.id]);
 
   const storyPageCount = 1 + notes.reduce((count, note) => count + noteImages(note).urls.length + 1, 0);
 
@@ -152,11 +153,11 @@ function TourStopStory({ stop, stopIndex, language, session, onExpand }: { stop:
       setSaving(true); setError("");
       let note: StoredTourNote;
       try {
-        note = (await createTourNote("tour-1", stop.id, bodyKo.trim(), bodyEn.trim(), imageFiles)).item;
+        note = (await createTourNote(routeId, stop.id, bodyKo.trim(), bodyEn.trim(), imageFiles, session.token, session.email, session.role === "admin")).item;
       } catch (cause) {
         if (!session.demo) throw cause;
         const imageUrls = imageFiles.map((image) => URL.createObjectURL(image));
-        note = { id: `preview-${Date.now()}-${Math.random().toString(36).slice(2)}`, route_id: "tour-1", stop_slug: stop.id, body_ko: bodyKo.trim(), body_en: bodyEn.trim(), image_url: imageUrls[0] || null, image_name: imageFiles[0]?.name || null, image_urls: imageUrls, image_names: imageFiles.map((image) => image.name), author_email: session.email, created_at: new Date().toISOString() };
+        note = { id: `preview-${Date.now()}-${Math.random().toString(36).slice(2)}`, route_id: routeId, stop_slug: stop.id, body_ko: bodyKo.trim(), body_en: bodyEn.trim(), image_url: imageUrls[0] || null, image_name: imageFiles[0]?.name || null, image_urls: imageUrls, image_names: imageFiles.map((image) => image.name), author_email: session.email, created_at: new Date().toISOString(), is_published: false };
       }
       setNotes((items) => [note, ...items]); setBodyKo(""); setBodyEn(""); setImageFiles([]); setEditing(false);
     } catch (cause) {
@@ -183,11 +184,11 @@ function TourStopStory({ stop, stopIndex, language, session, onExpand }: { stop:
               <div className="legend"><span><i className="legend-dot" />{t.mapLegend}</span><span><i className="legend-line" />{t.routeLegend}</span></div>
               <button onClick={onExpand}>{t.zoom}<span>⛶</span></button>
             </div>
-            <CampusMap stopIndex={stopIndex} variant="tour" language={language} /><p className="map-note">{t.floorPlan}</p>
+            <CampusMap stopIndex={mapStopIndex} variant="tour" language={language} /><p className="map-note">{t.floorPlan}</p>
           </div>
           <article className="stop-card">
             <div className="stop-meta"><span>{stop.building[langIndex]}</span><span>{stop.floor[langIndex]}</span></div>
-            <p className="stop-number">STOP {String(stopIndex + 1).padStart(2, "0")} / {tourStops.length}</p>
+            <p className="stop-number">STOP {String(stopIndex + 1).padStart(2, "0")} / {stopCount}</p>
             <h2>{stop.name[langIndex]}</h2>
             {(session || notes.length > 0) && <section className="member-notes" aria-label={language === "ko" ? "홍보단 장소 설명" : "Ambassador place notes"}>
               <div className="member-notes-heading">
@@ -207,7 +208,7 @@ function TourStopStory({ stop, stopIndex, language, session, onExpand }: { stop:
             </section>}
           </article>
         </section>
-        {notes.map((note) => <MemberNoteCard key={note.id} note={note} language={language} stop={stop} stopIndex={stopIndex} />)}
+        {notes.map((note) => <MemberNoteCard key={note.id} note={note} language={language} stop={stop} stopIndex={stopIndex} stopCount={stopCount} />)}
       </div>
       {storyPageCount > 1 && <div className="tour-story-controls" aria-label={language === "ko" ? "사진과 설명 이동" : "Story navigation"}>
         <button type="button" onClick={() => moveStory(storyPage - 1)} disabled={storyPage === 0} aria-label={language === "ko" ? "이전 화면" : "Previous panel"}>←</button>
@@ -222,11 +223,32 @@ function TourPage({ language, session }: { language: Language; session: UserSess
   const t = copy[language];
   const [active, setActive] = useState(0);
   const [expanded, setExpanded] = useState(false);
+  const [routeId, setRouteId] = useState("tour-1");
+  const [routes, setRoutes] = useState<StoredTourRoute[]>([{
+    id: "tour-1", name: "Tour 1", color: "#ff2d8d", sort_index: 1, is_published: true,
+    stops: tourStops.map((stop, index) => ({ id: `fallback-${stop.id}`, route_id: "tour-1", stop_slug: stop.id, title_ko: stop.name[0], title_en: stop.name[1], published: true, sort_index: index + 1 })),
+  }]);
   const containerRef = useRef<HTMLDivElement>(null);
   const langIndex = language === "ko" ? 0 : 1;
+  const currentRoute = routes.find((item) => item.id === routeId) || routes[0] || { id: "tour-1", name: "Tour 1", color: "#ff2d8d", sort_index: 1, is_published: true, stops: [] };
+  const routeStops = (currentRoute?.stops || []).filter((item) => item.published || session?.role === "admin").flatMap((item) => {
+    const stop = tourStops.find((candidate) => candidate.id === item.stop_slug);
+    return stop ? [{ ...stop, name: [item.title_ko || stop.name[0], item.title_en || stop.name[1]] as [string, string] }] : [];
+  });
+
+  useEffect(() => {
+    let activeRequest = true;
+    loadTourRoutes().then(({ items }) => {
+      const available = items.filter((item) => (item.is_published || session?.role === "admin") && item.stops.length > 0);
+      if (!activeRequest || !available.length) return;
+      setRoutes(available);
+      setRouteId((current) => available.some((item) => item.id === current) ? current : available[0].id);
+    }).catch(() => undefined);
+    return () => { activeRequest = false; };
+  }, [session?.role]);
 
   const move = (index: number) => {
-    const next = (index + tourStops.length) % tourStops.length;
+    const next = (index + routeStops.length) % routeStops.length;
     setActive(next);
     containerRef.current?.querySelector<HTMLElement>(`[data-stop-index="${next}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
@@ -240,23 +262,23 @@ function TourPage({ language, session }: { language: Language; session: UserSess
     }, { root, threshold: [0.45, 0.65, 0.8] });
     root.querySelectorAll("[data-stop-index]").forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, []);
+  }, [routeStops.length]);
 
   return (
     <main className="tour-page">
-      <div className="tour-intro-strip"><p className="tour-only-title">{t.tourLabel}</p></div>
-      <div className="tour-progress" aria-label={`Tour progress ${active + 1} of ${tourStops.length}`}><span style={{ width: `${((active + 1) / tourStops.length) * 100}%` }} /></div>
+      <div className="tour-intro-strip"><p className="tour-only-title">{t.tourLabel}</p>{routes.length > 1 && <select className="tour-route-select" value={routeId} onChange={(event) => { setRouteId(event.target.value); setActive(0); containerRef.current?.scrollTo({ top: 0 }); }} aria-label={language === "ko" ? "투어 루트 선택" : "Choose tour route"}>{routes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select>}</div>
+      <div className="tour-progress" aria-label={`Tour progress ${active + 1} of ${routeStops.length}`}><span style={{ width: `${routeStops.length ? ((active + 1) / routeStops.length) * 100 : 0}%`, background: currentRoute?.color }} /></div>
       <div className="tour-slides" ref={containerRef}>
-        {tourStops.map((stop, index) => (
+        {routeStops.map((stop, index) => (
           <section className="tour-slide" key={stop.id} data-stop-index={index} aria-label={`${index + 1}. ${stop.name[langIndex]}`}>
-            <TourStopStory stop={stop} stopIndex={index} language={language} session={session} onExpand={() => setExpanded(true)} />
+            <TourStopStory routeId={currentRoute.id} stop={stop} stopIndex={index} stopCount={routeStops.length} mapStopIndex={Math.max(0, tourStops.findIndex((item) => item.id === stop.id))} language={language} session={session} onExpand={() => setExpanded(true)} />
           </section>
         ))}
       </div>
       <div className="stop-rail" aria-label="Tour stops">
-        {tourStops.map((stop, index) => <button key={stop.id} className={index === active ? "active" : ""} onClick={() => move(index)} aria-label={`Go to stop ${index + 1}: ${stop.name[langIndex]}`}><span>{String(index + 1).padStart(2, "0")}</span></button>)}
+        {routeStops.map((stop, index) => <button key={stop.id} className={index === active ? "active" : ""} onClick={() => move(index)} aria-label={`Go to stop ${index + 1}: ${stop.name[langIndex]}`}><span>{String(index + 1).padStart(2, "0")}</span></button>)}
       </div>
-      {expanded && <div className="map-modal" role="dialog" aria-modal="true" aria-label={t.zoom}><button className="modal-close" onClick={() => setExpanded(false)}>{t.close} ×</button><CampusMap stopIndex={active} variant="tour" language={language} expanded /></div>}
+      {expanded && <div className="map-modal" role="dialog" aria-modal="true" aria-label={t.zoom}><button className="modal-close" onClick={() => setExpanded(false)}>{t.close} ×</button><CampusMap stopIndex={Math.max(0, tourStops.findIndex((item) => item.id === routeStops[active]?.id))} variant="tour" language={language} expanded /></div>}
     </main>
   );
 }
@@ -274,6 +296,7 @@ export default function AmbassadorsApp() {
   const [language, setLanguage] = useState<Language>("ko");
   const [route, setRoute] = useState<RouteKey>("intro");
   const [session, setSession] = useState<UserSession | null>(null);
+  const [recoveryMode, setRecoveryMode] = useState(false);
 
   useEffect(() => {
     const syncRoute = () => setRoute(routeFromHash());
@@ -283,31 +306,29 @@ export default function AmbassadorsApp() {
   }, []);
 
   useEffect(() => {
-    const saved = window.sessionStorage.getItem("sshs-session");
-    if (saved) {
-      try {
-        // Session storage is the external session source for the lightweight REST auth client.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setSession(JSON.parse(saved));
-      } catch { window.sessionStorage.removeItem("sshs-session"); }
-    }
+    let active = true;
+    getCurrentAuthSession().then((auth) => {
+      if (active && auth) setSession({ email: auth.email, role: auth.role, token: auth.accessToken });
+    }).catch(() => undefined);
+    const unsubscribe = onAuthSessionChange((auth, event) => {
+      if (!active) return;
+      setSession(auth ? { email: auth.email, role: auth.role, token: auth.accessToken } : null);
+      if (event === "PASSWORD_RECOVERY") { setRecoveryMode(true); goTo("login"); }
+    });
+    return () => { active = false; unsubscribe(); };
   }, []);
 
-  const updateSession = (next: UserSession | null) => {
-    setSession(next);
-    if (next) window.sessionStorage.setItem("sshs-session", JSON.stringify(next));
-    else window.sessionStorage.removeItem("sshs-session");
-  };
+  const updateSession = (next: UserSession | null) => setSession(next);
 
   const content = useMemo(() => {
     if (route === "intro") return <IntroPage language={language} />;
     if (route === "tour") return <TourPage language={language} session={session} />;
     if (route === "survey") return <SurveyPage language={language} session={session} />;
     if (route === "data") return <DataPage language={language} session={session} />;
-    if (route === "login") return <LoginPage language={language} session={session} setSession={updateSession} />;
+    if (route === "login") return <LoginPage language={language} session={session} setSession={updateSession} recoveryMode={recoveryMode} onRecoveryComplete={() => setRecoveryMode(false)} />;
     if (route === "admin") return <AdminPage language={language} session={session} />;
     return <PlaceholderPage route={route} language={language} />;
-  }, [route, language, session]);
+  }, [route, language, recoveryMode, session]);
 
-  return <div className="site-shell"><Header language={language} onLanguage={() => setLanguage((value) => value === "ko" ? "en" : "ko")} route={route} session={session} onLogout={() => { updateSession(null); goTo("intro"); }} />{content}</div>;
+  return <div className="site-shell"><Header language={language} onLanguage={() => setLanguage((value) => value === "ko" ? "en" : "ko")} route={route} session={session} onLogout={() => { signOut().catch(() => undefined); updateSession(null); goTo("intro"); }} />{content}</div>;
 }

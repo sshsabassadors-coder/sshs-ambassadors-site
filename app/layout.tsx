@@ -3,8 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "SSHS Ambassadors",
-  description: "Connecting SSHS to the World: The Voice of Korea’s Young Scientists",
-  other: { "codex-preview": "development" },
+  description: "서울과학고 학생홍보단의 캠퍼스 투어, 방문 설문, 부원 자료실",
   icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
 };
 

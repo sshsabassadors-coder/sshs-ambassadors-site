@@ -1,7 +1,6 @@
-SSHS Ambassadors source snapshot
-Created: 2026-08-19
-Commit: be3a6e22614507111487939f5f2409b7478fc273
-Site version: 28
-Live URL: https://sshs-ambassadors.soullee0180.chatgpt.site
+SSHS Ambassadors corrected source package
+Updated: 2026-08-27
+Site version: 28 complete Supabase/GitHub Pages integration
+Target URL: https://sshsabassadors-coder.github.io/sshs-ambassadors-site/
 Git history: not included
 Secrets and environment values: not included

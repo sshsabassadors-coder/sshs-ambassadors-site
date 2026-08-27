@@ -6,7 +6,7 @@
 
 1. [Git](https://git-scm.com/)을 설치한다.
 2. [GitHub](https://github.com/) 계정을 준비한다.
-3. GitHub에서 `New repository`를 눌러 저장소 이름을 `sshs-ambassadors`로 만든다.
+3. GitHub에서 `New repository`를 눌러 저장소 이름을 `sshs-ambassadors-site`로 만든다.
 4. 공개 저장소를 기본으로 한다. 이 프로젝트에는 개인정보·실제 `.env`·secret을 넣지 않는다.
 
 ## 2. 커밋 전 검사
@@ -29,7 +29,7 @@ git init
 git add .
 git commit -m "Initial SSHS Ambassadors site"
 git branch -M main
-git remote add origin https://github.com/GITHUB_USERNAME/sshs-ambassadors.git
+git remote add origin https://github.com/GITHUB_USERNAME/sshs-ambassadors-site.git
 git push -u origin main
 ```
 
@@ -58,7 +58,7 @@ Workflow는 저장소 이름을 자동으로 `VITE_BASE_PATH`에 넣고 `npm run
 기본 주소:
 
 ```text
-https://GITHUB_USERNAME.github.io/sshs-ambassadors/
+https://GITHUB_USERNAME.github.io/sshs-ambassadors-site/
 ```
 
 이 주소를 Supabase `Authentication → URL Configuration → Redirect URLs`에 추가한다.
