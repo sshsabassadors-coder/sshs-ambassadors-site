@@ -1,5 +1,11 @@
 export type AuthRole = "member" | "admin";
 
+export type TourStopNoteImage = {
+  storage_path: string;
+  original_name: string;
+  sort_order: number;
+};
+
 export type TourStopNote = {
   id: string;
   tour_stop_slug: string;
@@ -8,6 +14,7 @@ export type TourStopNote = {
   body_en: string;
   is_published: boolean;
   created_at: string;
+  tour_stop_note_images?: TourStopNoteImage[];
 };
 
 type AuthSession = {
@@ -87,12 +94,16 @@ export async function uploadArchiveFile(file: File, token: string, entryId: stri
 
 export async function getTourStopNotes(slug: string, token?: string): Promise<TourStopNote[]> {
   if (!hasSupabaseConfig) return [];
-  const fields = "id,tour_stop_slug,author_id,body_ko,body_en,is_published,created_at";
-  const response = await fetch(`${supabaseUrl}/rest/v1/tour_stop_notes?select=${fields}&tour_stop_slug=eq.${encodeURIComponent(slug)}&order=created_at.desc`, {
+  const fields = "id,tour_stop_slug,author_id,body_ko,body_en,is_published,created_at,tour_stop_note_images(storage_path,original_name,sort_order)";
+  const response = await fetch(`${supabaseUrl}/rest/v1/tour_stop_notes?select=${encodeURIComponent(fields)}&tour_stop_slug=eq.${encodeURIComponent(slug)}&order=created_at.desc`, {
     headers: baseHeaders(token),
   });
   if (!response.ok) throw new Error(await parseError(response));
-  return response.json();
+  const rows = await response.json() as TourStopNote[];
+  return rows.map((row) => ({
+    ...row,
+    tour_stop_note_images: [...(row.tour_stop_note_images || [])].sort((a, b) => a.sort_order - b.sort_order),
+  }));
 }
 
 export async function addTourStopNote(slug: string, bodyKo: string, bodyEn: string, token: string): Promise<TourStopNote> {
@@ -111,6 +122,78 @@ export async function addTourStopNote(slug: string, bodyKo: string, bodyEn: stri
   if (!response.ok) throw new Error(await parseError(response));
   const rows = await response.json();
   return rows[0];
+}
+
+function encodedStoragePath(path: string) {
+  return path.split("/").map((part) => encodeURIComponent(part)).join("/");
+}
+
+export function tourImagePublicUrl(path: string) {
+  return `${supabaseUrl}/storage/v1/object/public/tour-images/${encodedStoragePath(path)}`;
+}
+
+export async function addTourStopNoteWithImages(
+  slug: string,
+  bodyKo: string,
+  bodyEn: string,
+  images: File[],
+  token: string,
+  publishNow: boolean,
+): Promise<TourStopNote> {
+  if (!hasSupabaseConfig) throw new Error("Supabase is not configured.");
+  if (!token) throw new Error("Sign in is required.");
+  if (images.length > 10) throw new Error("Up to 10 images can be added to one note.");
+
+  const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+  for (const image of images) {
+    if (!allowedTypes.has(image.type)) throw new Error("Photos must be JPG, PNG, or WebP files.");
+    if (image.size > 10 * 1024 * 1024) throw new Error("Each image must be 10 MB or smaller.");
+  }
+
+  const noteResponse = await fetch(`${supabaseUrl}/rest/v1/tour_stop_notes`, {
+    method: "POST",
+    headers: { ...baseHeaders(token), Prefer: "return=representation" },
+    body: JSON.stringify({
+      tour_stop_slug: slug,
+      body_ko: bodyKo,
+      body_en: bodyEn,
+      is_published: publishNow,
+    }),
+  });
+  if (!noteResponse.ok) throw new Error(await parseError(noteResponse));
+  const noteRows = await noteResponse.json() as TourStopNote[];
+  const note = noteRows[0];
+  if (!note) throw new Error("The note was not returned after saving.");
+
+  const uploaded: TourStopNoteImage[] = [];
+  for (let index = 0; index < images.length; index += 1) {
+    const image = images[index];
+    const safeName = image.name.replace(/[^a-zA-Z0-9._-]/g, "-") || `image-${index + 1}`;
+    const path = `tour-notes/${note.id}/${crypto.randomUUID()}-${safeName}`;
+    const uploadResponse = await fetch(`${supabaseUrl}/storage/v1/object/tour-images/${encodedStoragePath(path)}`, {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": image.type,
+        "x-upsert": "false",
+      },
+      body: image,
+    });
+    if (!uploadResponse.ok) throw new Error(await parseError(uploadResponse));
+    uploaded.push({ storage_path: path, original_name: image.name, sort_order: index });
+  }
+
+  if (uploaded.length > 0) {
+    const metadataResponse = await fetch(`${supabaseUrl}/rest/v1/tour_stop_note_images`, {
+      method: "POST",
+      headers: { ...baseHeaders(token), Prefer: "return=minimal" },
+      body: JSON.stringify(uploaded.map((image) => ({ note_id: note.id, ...image }))),
+    });
+    if (!metadataResponse.ok) throw new Error(await parseError(metadataResponse));
+  }
+
+  return { ...note, tour_stop_note_images: uploaded };
 }
 
 export async function deleteTourStopNote(id: string, token: string) {
