@@ -171,6 +171,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid #ff83ba; outline-offs
 .tour-photo-panel { display: grid; grid-template-columns: minmax(280px, 31fr) minmax(0, 69fr); background: #fff; }
 .tour-photo-heading { min-width: 0; padding: clamp(34px, 4.2vw, 68px); display: flex; flex-direction: column; justify-content: center; background: #fff; }
 .tour-photo-heading h3 { margin: 0; color: var(--navy); font-size: clamp(38px, 4vw, 64px); line-height: 1; letter-spacing: -.05em; }
+.tour-note-delete { margin-top: 24px; align-self: flex-start; padding: 8px 10px; border: 1px solid currentColor; background: transparent; color: #a0003c; font-size: 9px; font-weight: 850; cursor: pointer; }
+.tour-note-delete:hover { background: #fff0f5; }
+.tour-note-delete:disabled { opacity: .55; cursor: wait; }
 .tour-photo-frame, .tour-description-visual { position: relative; min-width: 0; height: 100%; margin: 0; overflow: hidden; background: #e9eef6; }
 .tour-photo-frame { border-left: 1px solid var(--line); }
 .tour-photo-frame img, .tour-description-visual img { width: 100%; height: 100%; display: block; object-fit: cover; }
@@ -178,9 +181,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid #ff83ba; outline-offs
 .tour-description-panel { display: grid; grid-template-columns: minmax(0, 73fr) minmax(280px, 27fr); background: #000; }
 .tour-description-visual::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 42%, rgba(0,0,0,.18) 69%, #000 100%); pointer-events: none; }
 .tour-description-visual > span { position: absolute; inset: 0; padding: 8vw; display: flex; align-items: center; color: rgba(255,255,255,.16); background: linear-gradient(135deg, var(--navy), #020817); font-size: clamp(56px, 9vw, 140px); font-weight: 900; letter-spacing: -.06em; }
-.tour-description-card { position: relative; z-index: 1; padding: clamp(30px, 4vw, 64px); display: flex; flex-direction: column; justify-content: center; color: #fff; background: #000; }
-.tour-description-card > span { color: #789bed; font-size: 9px; font-weight: 900; letter-spacing: .16em; }
-.tour-description-card p { margin: 22px 0 0; color: #f3f5fa; font-size: clamp(15px, 1.45vw, 22px); line-height: 1.85; word-break: keep-all; }
+.tour-description-card { position: relative; z-index: 1; min-height: 0; padding: clamp(30px, 4vw, 64px); display: flex; flex-direction: column; justify-content: center; overflow: hidden; color: #fff; background: #000; }
+.tour-note-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.tour-note-panel-heading > span { color: #789bed; font-size: 9px; font-weight: 900; letter-spacing: .16em; }
+.tour-note-panel-heading .tour-note-delete { flex: 0 0 auto; margin-top: 0; color: #ff8abc; }
+.tour-note-panel-heading .tour-note-delete:hover { background: rgba(255,45,141,.14); }
+.tour-description-card p { max-height: calc(100% - 46px); margin: 18px 0 0; padding-right: 8px; overflow-y: auto; overscroll-behavior: contain; color: #f3f5fa; font-size: clamp(12px, 1vw, 16px); line-height: 1.72; white-space: pre-wrap; overflow-wrap: anywhere; word-break: keep-all; }
 .tour-description-panel.no-photo { grid-template-columns: minmax(0, 42fr) minmax(340px, 58fr); }
 .tour-description-panel.no-photo .tour-description-visual::after { background: linear-gradient(90deg, transparent, #000); }
 .tour-story-controls { position: absolute; z-index: 8; right: 18px; bottom: 18px; height: 38px; display: flex; align-items: center; color: var(--navy); background: rgba(255,255,255,.94); border: 1px solid rgba(11,34,101,.16); box-shadow: 0 10px 30px rgba(6,23,68,.14); backdrop-filter: blur(10px); }
@@ -512,7 +518,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid #ff83ba; outline-offs
   .stop-card h2 { font-size: 45px; }
   .tour-photo-heading .stop-number { margin-top: 12px; }
   .tour-photo-heading h3 { font-size: 38px; }
-  .tour-description-card p { margin-top: 14px; font-size: 14px; line-height: 1.65; }
+  .tour-description-card p { margin-top: 12px; font-size: 12px; line-height: 1.6; }
+  .tour-note-delete { margin-top: 14px; }
   .tour-story-controls { right: 10px; bottom: 10px; }
   .member-notes { margin-top: 12px; padding-top: 10px; }
   .member-notes-heading { align-items: flex-start; flex-direction: column; }

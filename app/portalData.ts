@@ -41,11 +41,6 @@ export const initialSurveys: Survey[] = [
     descriptionKo: "영문 투어의 설명과 동선에 대한 의견을 받습니다.", descriptionEn: "Share feedback on the English-language route and presentation.",
     status: "published", questions: defaultQuestions,
   },
-  {
-    id: "science-fair-2026", number: 3, titleKo: "과학전람회 공개 투어", titleEn: "Science Fair Open Tour", date: "2026-06-12",
-    descriptionKo: "응답 기간이 종료된 설문입니다.", descriptionEn: "This survey is now closed.",
-    status: "closed", questions: defaultQuestions,
-  },
 ];
 
 export const sampleResponses = [

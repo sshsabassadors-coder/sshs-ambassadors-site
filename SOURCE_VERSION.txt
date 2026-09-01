@@ -1,6 +1,6 @@
 SSHS Ambassadors corrected source package
-Updated: 2026-08-27
-Site version: 28 complete Supabase/GitHub Pages integration
+Updated: 2026-08-28
+Site version: 28.1 public tour notes, signed-in deletion, and survey cleanup
 Target URL: https://sshsabassadors-coder.github.io/sshs-ambassadors-site/
 Git history: not included
 Secrets and environment values: not included

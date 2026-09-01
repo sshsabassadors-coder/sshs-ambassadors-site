@@ -5,7 +5,7 @@ import CampusMap from "./CampusMap";
 import { createTourNote, loadTourNotes, loadTourRoutes, StoredTourNote, type StoredTourRoute } from "./contentApi";
 import { copy, Language, RouteKey, TourStop, tourStops } from "./data";
 import { AdminPage, DataPage, LoginPage, SurveyPage, UserSession } from "./PortalPages";
-import { getCurrentAuthSession, onAuthSessionChange, signOut } from "./supabase";
+import { deleteTourStopNote, getCurrentAuthSession, onAuthSessionChange, signOut } from "./supabase";
 
 function routeFromHash(): RouteKey {
   if (typeof window === "undefined") return "intro";
@@ -78,7 +78,7 @@ function noteImages(note: StoredTourNote) {
   return { urls, names };
 }
 
-function MemberNoteCard({ note, language, stop, stopIndex, stopCount }: { note: StoredTourNote; language: Language; stop: TourStop; stopIndex: number; stopCount: number }) {
+function MemberNoteCard({ note, language, stop, stopIndex, stopCount, onDelete, deleting }: { note: StoredTourNote; language: Language; stop: TourStop; stopIndex: number; stopCount: number; onDelete?: () => void; deleting: boolean }) {
   const langIndex = language === "ko" ? 0 : 1;
   const { urls, names } = noteImages(note);
   const description = language === "ko" ? note.body_ko || note.body_en : note.body_en || note.body_ko;
@@ -92,6 +92,7 @@ function MemberNoteCard({ note, language, stop, stopIndex, stopCount }: { note: 
           <div className="stop-meta"><span>{stop.building[langIndex]}</span><span>{stop.floor[langIndex]}</span></div>
           <p className="stop-number">STOP {String(stopIndex + 1).padStart(2, "0")} / {stopCount}</p>
           <h3>{stop.name[langIndex]}</h3>
+          {onDelete && <button className="tour-note-delete" type="button" onClick={onDelete} disabled={deleting}>{deleting ? (language === "ko" ? "삭제 중…" : "Deleting…") : (language === "ko" ? "사진·설명 삭제" : "Delete photos & note")}</button>}
         </article>
         <figure className="tour-photo-frame">
           <img src={imageUrl} alt={names[imageIndex] || `${stop.name[langIndex]} ${language === "ko" ? "사진" : "photo"} ${imageIndex + 1}`} />
@@ -104,7 +105,10 @@ function MemberNoteCard({ note, language, stop, stopIndex, stopCount }: { note: 
         {coverUrl ? <img src={coverUrl} alt={coverName || `${stop.name[langIndex]} ${language === "ko" ? "대표 사진" : "featured photo"}`} /> : <span>{stop.name[langIndex]}</span>}
       </figure>
       <article className="tour-description-card">
-        <span>AMBASSADOR NOTE</span>
+        <div className="tour-note-panel-heading">
+          <span>AMBASSADOR NOTE</span>
+          {onDelete && <button className="tour-note-delete" type="button" onClick={onDelete} disabled={deleting}>{deleting ? (language === "ko" ? "삭제 중…" : "Deleting…") : (language === "ko" ? "사진·설명 삭제" : "Delete photos & note")}</button>}
+        </div>
         <p>{description}</p>
       </article>
     </section>
@@ -118,6 +122,7 @@ function TourStopStory({ routeId, stop, stopIndex, stopCount, mapStopIndex, lang
   const [bodyEn, setBodyEn] = useState("");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [storyPage, setStoryPage] = useState(0);
   const storyTrack = useRef<HTMLDivElement>(null);
@@ -153,7 +158,7 @@ function TourStopStory({ routeId, stop, stopIndex, stopCount, mapStopIndex, lang
       setSaving(true); setError("");
       let note: StoredTourNote;
       try {
-        note = (await createTourNote(routeId, stop.id, bodyKo.trim(), bodyEn.trim(), imageFiles, session.token, session.email, session.role === "admin")).item;
+        note = (await createTourNote(routeId, stop.id, bodyKo.trim(), bodyEn.trim(), imageFiles, session.token, session.email, true)).item;
       } catch (cause) {
         if (!session.demo) throw cause;
         const imageUrls = imageFiles.map((image) => URL.createObjectURL(image));
@@ -163,6 +168,20 @@ function TourStopStory({ routeId, stop, stopIndex, stopCount, mapStopIndex, lang
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not save this note.");
     } finally { setSaving(false); }
+  };
+
+  const removeNote = async (note: StoredTourNote) => {
+    if (!session || !window.confirm(language === "ko" ? "이 설명과 연결된 사진을 모두 삭제할까요?" : "Delete this note and all of its photos?")) return;
+    try {
+      setDeletingId(note.id); setError("");
+      if (!session.demo) await deleteTourStopNote(note.id);
+      setNotes((items) => items.filter((item) => item.id !== note.id));
+      setStoryPage(0);
+      storyTrack.current?.scrollTo({ left: 0, behavior: "auto" });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not delete this note.");
+      moveStory(0);
+    } finally { setDeletingId(null); }
   };
 
   return (
@@ -208,7 +227,7 @@ function TourStopStory({ routeId, stop, stopIndex, stopCount, mapStopIndex, lang
             </section>}
           </article>
         </section>
-        {notes.map((note) => <MemberNoteCard key={note.id} note={note} language={language} stop={stop} stopIndex={stopIndex} stopCount={stopCount} />)}
+        {notes.map((note) => <MemberNoteCard key={note.id} note={note} language={language} stop={stop} stopIndex={stopIndex} stopCount={stopCount} onDelete={session ? () => removeNote(note) : undefined} deleting={deletingId === note.id} />)}
       </div>
       {storyPageCount > 1 && <div className="tour-story-controls" aria-label={language === "ko" ? "사진과 설명 이동" : "Story navigation"}>
         <button type="button" onClick={() => moveStory(storyPage - 1)} disabled={storyPage === 0} aria-label={language === "ko" ? "이전 화면" : "Previous panel"}>←</button>
